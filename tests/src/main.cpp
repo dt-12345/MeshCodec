@@ -44,16 +44,10 @@ void WriteFile(const std::string path, const std::span<const mc::u8>& data) {
     file.close();
 }
 
-bool DecompressAssert(const std::filesystem::path compressedPath, void* workMem, const std::filesystem::path decompressedPath) {
+bool Decompress(const std::filesystem::path compressedPath, void* workMem, const std::filesystem::path outputPath) {
     std::vector<mc::u8> data;
     if (!ReadFile(compressedPath.string(), data)) {
         std::cout << "Failed to read file: " << compressedPath.string() << "\n";
-        return false;
-    }
-
-    std::vector<mc::u8> decompressed;
-    if (!ReadFile(decompressedPath.string(), decompressed)) {
-        std::cout << "Failed to read file: " << decompressedPath.string() << "\n";
         return false;
     }
 
@@ -61,28 +55,20 @@ bool DecompressAssert(const std::filesystem::path compressedPath, void* workMem,
     size_t decompressedSize = header->GetDecompressedSize();
     std::vector<mc::u8> outputBuffer(decompressedSize);
 
-    const bool result = mc::DecompressMC(outputBuffer.data(), decompressedSize, data.data(), data.size(), workMem, 0x10000000);
-
-    if (result) {
-        if (outputBuffer == decompressed)
-            return true;
-        else
-            WriteFile(compressedPath.stem().string(), outputBuffer);
+    if (mc::DecompressMC(outputBuffer.data(), decompressedSize, data.data(), data.size(), workMem, 0x10000000)) {
+        std::cout << compressedPath.filename() << "\n";
+        std::filesystem::create_directories(outputPath);
+        WriteFile((outputPath / compressedPath.stem()).string(), outputBuffer);
+        return true;
     }
 
     return false;
 }
 
-bool DecompressAssertCave(const std::filesystem::path compressedPath, void* workMem, const std::filesystem::path decompressedPath) {
+bool DecompressCave(const std::filesystem::path compressedPath, void* workMem, const std::filesystem::path outputPath) {
     std::vector<mc::u8> data;
     if (!ReadFile(compressedPath.string(), data)) {
         std::cout << "Failed to read file: " << compressedPath.string() << "\n";
-        return false;
-    }
-
-    std::vector<mc::u8> decompressed;
-    if (!ReadFile(decompressedPath.string(), decompressed)) {
-        std::cout << "Failed to read file: " << decompressedPath.string() << "\n";
         return false;
     }
 
@@ -90,13 +76,11 @@ bool DecompressAssertCave(const std::filesystem::path compressedPath, void* work
     size_t decompressedSize = header->decompressedSize;
     std::vector<mc::u8> outputBuffer(decompressedSize);
 
-    const bool result = mc::DecompressChunk(outputBuffer.data(), decompressedSize, data.data(), data.size(), workMem, 0x10000000);
-
-    if (result) {
-        if (outputBuffer == decompressed)
-            return true;
-        // else
-        //     WriteFile(compressedPath.stem().string(), outputBuffer);
+    if (mc::DecompressChunk(outputBuffer.data(), decompressedSize, data.data(), data.size(), workMem, 0x10000000)) {
+        std::cout << compressedPath.filename() << "\n";
+        std::filesystem::create_directories(outputPath);
+        WriteFile((outputPath / compressedPath.stem()).string(), outputBuffer);
+        return true;
     }
 
     return false;
@@ -104,9 +88,7 @@ bool DecompressAssertCave(const std::filesystem::path compressedPath, void* work
 
 int main(int argc, char** argv) {
 
-    const std::filesystem::path romfsPath = ParseInput(argc, argv, 0);
-    const std::filesystem::path decompressedPath = ParseInput(argc, argv, 1);
-    const std::filesystem::path decompressedCavePath = ParseInput(argc, argv, 2);
+    // temporarily repurposing this as a simple cli program bc I'm lazy
 
     // 0x12ac10 is needed for StackAllocator initialization in game
     // you can get away with around 0x120000 here since ZSTD_DCtx is smaller than in game
@@ -114,31 +96,18 @@ int main(int argc, char** argv) {
     // I'm just allocating an absurdly high amount here to be safe
     void* workMem = malloc(0x10000000);
 
-    bool good = true;
+    const std::filesystem::path dirPath = ParseInput(argc, argv, 0);
+    const std::filesystem::path outputPath = ParseInput(argc, argv, 1);
 
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(romfsPath / std::filesystem::path("Model"))) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dirPath)) {
         if (entry.path().extension() == ".mc") {
-            const std::filesystem::path decompressed = decompressedPath / entry.path().stem();
-            if (!DecompressAssert(entry.path().string(), workMem, decompressed.string())) {
-                std::cout << entry.path().stem().string() << "\n";
-                good = false;
-            }
+            if (!Decompress(entry.path().string(), workMem, outputPath / std::filesystem::relative(entry.path().parent_path(), dirPath)))
+                std::cout << "Failed to decompress " << entry.path().string() << "\n";
+        } else if (entry.path().extension() == ".chunk") {
+            if (!DecompressCave(entry.path().string(), workMem, outputPath / std::filesystem::relative(entry.path().parent_path(), dirPath)))
+                std::cout << "Failed to decompress " << entry.path().string() << "\n";
         }
     }
-
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(romfsPath / std::filesystem::path("Cave/cave017"))) {
-        if (entry.path().extension() == ".chunk") {
-            std::cout << entry.path().string() << "\n";
-            const std::filesystem::path decompressed = decompressedCavePath / std::filesystem::relative(entry.path(), romfsPath / std::filesystem::path("Cave/cave017"));
-            if (!DecompressAssertCave(entry.path().string(), workMem, decompressed.string())) {
-                std::cout << entry.path().string() << "\n";
-                good = false;
-            }
-        }
-    }
-
-    if (good)
-        std::cout << "OK!\n";
 
     free(workMem);
 

@@ -21,6 +21,12 @@ cmake -B build . -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_BUILD_T
 cmake --build build
 ```
 
+The test program is currently a crude CLI tool for decompressing a directory of files. There is a pre-built Windows-only release available. Its usage is as follows:
+
+```sh
+mesh_codec.exe <path_to_input_dir> <path_to_output_dir>
+```
+
 ## Credit
 
 Some of the code found in `mc_IndexCodec.h`/`mc_IndexCodec.cpp` and `mc_VertexCodec.cpp` is based on Arseny Kapoulkine's [meshoptimizer](https://github.com/zeux/meshoptimizer) and is licensed under the MIT License (it was not added as a library because significant enough changes were made where using the meshoptimizer library directly is impractical). [ZStandard](https://github.com/facebook/zstd) is licened under GPL-2.0 and was developed by Meta. When building with MSVC, due to its lack of float16 support, float16 conversions are handled by an implementation by [Phernost from StackOverflow](https://stackoverflow.com/a/3542975) which is licensed under the Unlicense. Everything else comes from reverse engineering work and is licensed under under GPL-2.0.
